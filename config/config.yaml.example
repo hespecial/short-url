@@ -1,0 +1,22 @@
+app:
+  port: 8080
+  mode: debug # gin mode: debug | release | test
+
+log:
+  path: ./logs
+  name: log # without ext
+  level: debug # log level: debug | info | warn | error
+
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  username: root
+  password:
+  database:
+  charset: utf8mb4
+
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password:
+  database: 0
