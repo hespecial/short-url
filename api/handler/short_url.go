@@ -1,25 +1,24 @@
-package controller
+package handler
 
 import (
-	"net/http"
-	"short-url/common/enum"
-	"short-url/common/response"
-	"short-url/internal/service"
-
 	"github.com/gin-gonic/gin"
+	"net/http"
+	"short-url/internal/common/enum"
+	"short-url/internal/common/response"
+	"short-url/internal/service"
 )
 
 type ShortUrlController struct {
-	svc service.ShortUrlService
+	svc *service.ShortUrlService
 }
 
-func NewShortUrlController(svc service.ShortUrlService) *ShortUrlController {
+func NewShortUrlController(svc *service.ShortUrlService) *ShortUrlController {
 	return &ShortUrlController{
 		svc: svc,
 	}
 }
 
-func (ctl *ShortUrlController) RevertToShortUrl(c *gin.Context) {
+func (hdl *ShortUrlController) RevertToShortUrl(c *gin.Context) {
 	var form struct {
 		Url      string        `binding:"required" json:"url"`
 		Priority enum.Priority `binding:"" json:"priority"`
@@ -30,7 +29,7 @@ func (ctl *ShortUrlController) RevertToShortUrl(c *gin.Context) {
 		return
 	}
 
-	shortUrl, err := ctl.svc.RevertToShortUrl(c, form.Url, form.Priority, form.Comment)
+	shortUrl, err := hdl.svc.RevertToShortUrl(c, form.Url, form.Priority, form.Comment)
 	if err != nil {
 		response.InvalidRequest(c, err.Error())
 		return
@@ -42,15 +41,20 @@ func (ctl *ShortUrlController) RevertToShortUrl(c *gin.Context) {
 	response.Success(c, data)
 }
 
-func (ctl *ShortUrlController) RedirectToOriginalUrl(c *gin.Context) {
+func (hdl *ShortUrlController) RedirectToOriginalUrl(c *gin.Context) {
 	shorUrlCode := c.Param("code")
-	urlMapping, err := ctl.svc.GetUrlMappingByShortUrlCode(c, shorUrlCode)
+	urlMapping, err := hdl.svc.GetUrlMappingByShortUrlCode(c, shorUrlCode)
 	if err != nil {
 		response.InvalidRequest(c, err.Error())
 		return
 	}
 
-	if err = ctl.svc.LogAccess(c, urlMapping.Id, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
+	if err = hdl.svc.ProcessAccess(c, urlMapping.Id, c.ClientIP()); err != nil {
+		response.BadRequest(c, err)
+		return
+	}
+
+	if err = hdl.svc.LogAccess(c, urlMapping.Id, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
 		response.BadRequest(c, err)
 		return
 	}

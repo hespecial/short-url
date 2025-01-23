@@ -1,6 +1,8 @@
 package model
 
-import "short-url/common/enum"
+import (
+	"short-url/internal/common/enum"
+)
 
 type UrlMapping struct {
 	Id              int64

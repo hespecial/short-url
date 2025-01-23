@@ -1,8 +1,8 @@
 package main
 
 import (
+	"short-url/api"
 	"short-url/global"
-	"short-url/internal/router"
 )
 
 func main() {
@@ -11,5 +11,5 @@ func main() {
 	global.InitMysql()
 	global.InitRedis()
 
-	router.StartServer()
+	api.StartServer()
 }

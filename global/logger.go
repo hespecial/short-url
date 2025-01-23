@@ -61,7 +61,7 @@ func (h *Handler) Handle(_ context.Context, r slog.Record) error {
 	msg := r.Message
 
 	// 获取调用者信息
-	pc, _, line, ok := runtime.Caller(3) // 跳过的调用堆栈深度，可根据需要调整
+	pc, _, line, ok := runtime.Caller(5) // 跳过的调用堆栈深度，可根据需要调整
 	var callerInfo string
 	if ok {
 		funcName := runtime.FuncForPC(pc).Name()

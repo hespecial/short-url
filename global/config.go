@@ -3,8 +3,8 @@ package global
 import (
 	"github.com/spf13/viper"
 	"log"
-	"short-url/common/enum"
 	"short-url/config"
+	"short-url/internal/common/enum"
 )
 
 var Conf *config.Config

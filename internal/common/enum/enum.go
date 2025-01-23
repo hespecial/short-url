@@ -5,7 +5,7 @@ import "time"
 const (
 	ConfigFile = "./config/config.yaml"
 
-	NullCache          = "null"
+	//NullCache          = "null"
 	KeyUserView        = "uv"
 	KeyOriginalUrlHash = "ouh"
 	KeyShortUrlCode    = "suc"

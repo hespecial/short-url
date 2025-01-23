@@ -1,14 +1,12 @@
-package router
+package api
 
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"log"
+	"short-url/api/handler"
 	"short-url/global"
-	"short-url/internal/controller"
 	"short-url/internal/repo"
-	"short-url/internal/repo/cache"
-	"short-url/internal/repo/dao"
 	"short-url/internal/service"
 )
 
@@ -24,18 +22,16 @@ func StartServer() {
 
 	api := router.Group("/api")
 
-	db := global.Db
-	rdb := global.Redis
 	svc := service.NewShortUrlService(repo.NewShortUrlRepo(
-		dao.NewShortUrlDao(db),
-		cache.NewShortUrlCache(rdb),
+		global.Db,
+		global.Redis,
 	))
 
-	ctl := controller.NewShortUrlController(svc)
+	hdl := handler.NewShortUrlController(svc)
 	{
-		router.GET("/:code", ctl.RedirectToOriginalUrl)
+		router.GET("/:code", hdl.RedirectToOriginalUrl)
 
-		api.POST("/shorten", ctl.RevertToShortUrl)
+		api.POST("/shorten", hdl.RevertToShortUrl)
 
 		api.GET("/short-url/list")
 		api.GET("/short-url/:id")

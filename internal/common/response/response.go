@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"log/slog"
 	"net/http"
-	"short-url/common/code"
+	"short-url/internal/common/code"
 )
 
 type Response struct {

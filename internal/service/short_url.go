@@ -4,30 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
-	"short-url/common/enum"
 	"short-url/global"
+	"short-url/internal/common/enum"
 	"short-url/internal/model"
 	"short-url/internal/repo"
+	"short-url/internal/util"
 	"short-url/pkg/bloom"
-	"short-url/util"
 	"time"
 
 	"gorm.io/gorm"
 )
 
-type ShortUrlService interface {
-	RevertToShortUrl(ctx context.Context, url string, priority enum.Priority, comment string) (string, error)
-	GetUrlMappingByShortUrlCode(ctx context.Context, shortUrlCode string) (*model.UrlMapping, error)
-	LogAccess(ctx context.Context, urlMapping int64, ip, userAgent string) error
+type ShortUrlService struct {
+	repo *repo.ShortUrlRepo
 }
 
-type shortUrlService struct {
-	repo repo.ShortUrlRepo
-}
-
-func NewShortUrlService(repo repo.ShortUrlRepo) ShortUrlService {
-	return &shortUrlService{
+func NewShortUrlService(repo *repo.ShortUrlRepo) *ShortUrlService {
+	return &ShortUrlService{
 		repo: repo,
 	}
 }
@@ -36,19 +29,7 @@ func getFullShortUrlPath(shortUrlCode string) string {
 	return fmt.Sprintf("http://%s:%d/%s", global.Conf.App.Host, global.Conf.App.Port, shortUrlCode)
 }
 
-const (
-	seed = "1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
-)
-
-var (
-	r = rand.New(rand.NewSource(time.Now().UnixNano()))
-)
-
-func (s *shortUrlService) generateShortUrlCode(priority enum.Priority, times int) string {
-	if times > 1000 {
-		return ""
-	}
-
+func (s *ShortUrlService) generateShortUrlCode(priority enum.Priority) string {
 	var minLen, maxLen int
 	switch priority {
 	case enum.PriorityLow:
@@ -61,32 +42,37 @@ func (s *shortUrlService) generateShortUrlCode(priority enum.Priority, times int
 		return ""
 	}
 
-	length := r.Intn(maxLen-minLen+1) + minLen
-	result := make([]byte, length)
-	for i := 0; i < length; i++ {
-		result[i] = seed[r.Intn(len(seed))]
+	var g func(int) string
+	g = func(times int) string {
+		if times > 1000 {
+			return ""
+		}
+		random := util.GenerateRandomBytes(minLen, maxLen)
+		if !bloom.Contains(random) {
+			bloom.Add(random)
+			return string(random)
+		}
+		return g(times + 1)
 	}
 
-	if !bloom.Contains(result) {
-		bloom.Add(result)
-		return string(result)
-	}
-
-	return s.generateShortUrlCode(priority, times+1)
+	return g(0)
 }
 
-func (s *shortUrlService) RevertToShortUrl(ctx context.Context, url string, priority enum.Priority, comment string) (string, error) {
+func (s *ShortUrlService) RevertToShortUrl(ctx context.Context, url string, priority enum.Priority, comment string) (string, error) {
+	if url[len(url)-1] == '/' {
+		url = url[:len(url)-1]
+	}
 	originalUrlHash := util.MD5(url)
 	urlMapping, err := s.repo.GetUrlMappingByOriginalUrlHash(ctx, originalUrlHash)
 	if err == nil {
 		return getFullShortUrlPath(urlMapping.ShortUrlCode), nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", nil
+		return "", err
 	}
 
 	urlMapping = &model.UrlMapping{
-		ShortUrlCode:    s.generateShortUrlCode(priority, 0),
+		ShortUrlCode:    s.generateShortUrlCode(priority),
 		OriginalUrl:     url,
 		OriginalUrlHash: originalUrlHash,
 		Priority:        priority,
@@ -101,11 +87,11 @@ func (s *shortUrlService) RevertToShortUrl(ctx context.Context, url string, prio
 	return getFullShortUrlPath(urlMapping.ShortUrlCode), nil
 }
 
-func (s *shortUrlService) GetUrlMappingByShortUrlCode(ctx context.Context, shortUrlCode string) (*model.UrlMapping, error) {
+func (s *ShortUrlService) GetUrlMappingByShortUrlCode(ctx context.Context, shortUrlCode string) (*model.UrlMapping, error) {
 	return s.repo.GetUrlMappingByShortUrlCode(ctx, shortUrlCode)
 }
 
-func (s *shortUrlService) LogAccess(ctx context.Context, urlMappingId int64, ip, userAgent string) error {
+func (s *ShortUrlService) LogAccess(ctx context.Context, urlMappingId int64, ip, userAgent string) error {
 	accessLog := &model.AccessLog{
 		UrlMappingId: urlMappingId,
 		Ip:           ip,
@@ -115,11 +101,26 @@ func (s *shortUrlService) LogAccess(ctx context.Context, urlMappingId int64, ip,
 	return s.repo.CreateAccessLog(ctx, accessLog)
 }
 
-func (s *shortUrlService) ProcessAccess(ctx context.Context, urlMappingId int64) error {
-	// accessStatic := &model.AccessStatistic{
-	// 	UrlMappingId: urlMappingId,
-	// 	LastAccessTime: time.Now().Unix(),
-	// }
-	panic("implement me")
+func (s *ShortUrlService) ProcessAccess(ctx context.Context, urlMappingId int64, ip string) error {
+	accessStatistic, err := s.repo.GetAccessStatisticByUrlMappingId(ctx, urlMappingId)
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		accessStatistic = &model.AccessStatistic{
+			UrlMappingId: urlMappingId,
+		}
+	}
 
+	accessStatistic.Pv++
+	ok, err := s.repo.SetUserView(ctx, urlMappingId, ip)
+	if err != nil {
+		return err
+	}
+	if ok {
+		accessStatistic.Uv++
+	}
+	accessStatistic.LastAccessTime = time.Now().Unix()
+
+	return s.repo.SaveAccessStatistic(ctx, accessStatistic)
 }
